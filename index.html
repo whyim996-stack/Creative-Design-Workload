@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Creative Design Workload</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+body{font-family:'Inter',system-ui,sans-serif;transition:.3s}
+:root{
+  --bg-light:#f8fafc;--bg-dark:#0f172a;
+  --card-light:rgba(255,255,255,.92);
+  --card-dark:rgba(255,255,255,.08);
+}
+body.light{background:var(--bg-light);color:#020617}
+body.dark{background:var(--bg-dark);color:#f8fafc}
+.glass{backdrop-filter:blur(12px);border:1px solid rgba(0,0,0,.08)}
+body.dark .glass{border-color:rgba(255,255,255,.15)}
+.card{cursor:grab;box-shadow:0 4px 12px rgba(0,0,0,.05)}
+.action{position:absolute;top:6px;right:6px;opacity:.4}
+.card:hover .action{opacity:1}
+.event{font-size:11px;padding:3px 6px;border-radius:6px;margin-top:4px}
+</style>
+</head>
+
+<body class="light">
+
+<header class="glass mx-6 mt-6 rounded-2xl px-6 py-4 flex justify-between">
+  <h1 class="text-xl font-bold">Creative Design Workload</h1>
+  <div class="flex gap-2">
+    <button onclick="showBoard()" class="glass px-4 py-2 rounded-full">Board</button>
+    <button onclick="showCalendar()" class="glass px-4 py-2 rounded-full">Calendar</button>
+    <button onclick="toggleTheme()" class="glass px-4 py-2 rounded-full">Dark / Light</button>
+    <button onclick="resetAll()" class="glass px-4 py-2 rounded-full text-red-500">Reset</button>
+  </div>
+</header>
+
+<div class="flex gap-6 px-6 mt-6">
+
+<aside class="glass w-72 rounded-2xl p-4">
+  <h2 class="font-semibold mb-2">Notes</h2>
+  <textarea id="notesInput" class="w-full h-64 bg-transparent outline-none resize-none"></textarea>
+</aside>
+
+<main id="boardView" class="flex-1">
+  <div id="board" class="flex gap-6 overflow-x-auto"></div>
+  <button onclick="addColumn()" class="mt-6 glass px-6 py-2 rounded-full">+ Add Column</button>
+</main>
+
+<main id="calendarView" class="flex-1 hidden">
+  <div class="glass rounded-2xl p-6">
+    <div class="flex justify-between mb-4">
+      <button onclick="changeMonth(-1)">◀</button>
+      <h2 id="monthLabel" class="font-semibold"></h2>
+      <button onclick="changeMonth(1)">▶</button>
+    </div>
+    <div class="grid grid-cols-7 gap-3 text-sm mb-2">
+      <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div>
+      <div>Fri</div><div>Sat</div><div>Sun</div>
+    </div>
+    <div id="calendarGrid" class="grid grid-cols-7 gap-3"></div>
+  </div>
+</main>
+
+</div>
+
+<script>
+/* THEME */
+function toggleTheme(){
+  document.body.classList.toggle("dark")
+  document.body.classList.toggle("light")
+  localStorage.setItem("theme",document.body.className)
+}
+document.body.className=localStorage.getItem("theme")||"light"
+
+/* NOTES */
+const notesInput=document.getElementById("notesInput")
+notesInput.value=localStorage.getItem("notes")||""
+notesInput.oninput=()=>localStorage.setItem("notes",notesInput.value)
+
+/* DATA */
+const today=new Date().toISOString().split("T")[0]
+let boardData=JSON.parse(localStorage.getItem("board"))||[
+  {title:"To Do",cards:[]},
+  {title:"In Progress",cards:[]},
+  {title:"Done",cards:[]}
+]
+function save(){localStorage.setItem("board",JSON.stringify(boardData))}
+
+/* VIEW */
+const boardView=document.getElementById("boardView")
+const calendarView=document.getElementById("calendarView")
+function showBoard(){boardView.classList.remove("hidden");calendarView.classList.add("hidden")}
+function showCalendar(){calendarView.classList.remove("hidden");boardView.classList.add("hidden");renderCalendar()}
+
+/* BOARD */
+const board=document.getElementById("board")
+function renderBoard(){
+  board.innerHTML=""
+  boardData.forEach((col,ci)=>{
+    board.innerHTML+=`
+    <div class="glass w-64 rounded-2xl p-4" ondragover="event.preventDefault()" ondrop="dropCard(${ci})">
+      <div class="flex mb-2">
+        <input class="font-semibold bg-transparent w-full" value="${col.title}"
+          onchange="boardData[${ci}].title=this.value;save()">
+        <span class="action" onclick="deleteColumn(${ci})">✕</span>
+      </div>
+      ${col.cards.map((c,i)=>`
+      <div class="card p-3 rounded-xl relative mt-3" draggable="true" ondragstart="dragStart(${ci},${i})">
+        <span class="action" onclick="deleteCard(${ci},${i})">✕</span>
+        <input class="bg-transparent w-full" value="${c.text}"
+          onchange="boardData[${ci}].cards[${i}].text=this.value;save()">
+        <input type="date" class="text-xs mt-2 bg-transparent" value="${c.date}"
+          onchange="boardData[${ci}].cards[${i}].date=this.value;save()">
+      </div>`).join("")}
+      <button onclick="addCard(${ci})" class="mt-3 text-sm opacity-70">+ Add Card</button>
+    </div>`
+  })
+  save()
+}
+function addColumn(){boardData.push({title:"New Column",cards:[]});renderBoard()}
+function addCard(ci){boardData[ci].cards.push({text:"New Task",date:today});renderBoard()}
+function deleteCard(ci,i){if(confirm("Hapus task?")){boardData[ci].cards.splice(i,1);renderBoard()}}
+function deleteColumn(ci){if(confirm("Hapus kolom?")){boardData.splice(ci,1);renderBoard()}}
+
+/* DRAG */
+let dragData=null
+function dragStart(c,i){dragData={c,i}}
+function dropCard(tc){
+  if(!dragData) return
+  boardData[tc].cards.push(boardData[dragData.c].cards.splice(dragData.i,1)[0])
+  dragData=null;renderBoard()
+}
+
+/* CALENDAR */
+const calendarGrid=document.getElementById("calendarGrid")
+const monthLabel=document.getElementById("monthLabel")
+let currentMonth=new Date()
+function renderCalendar(){
+  calendarGrid.innerHTML=""
+  monthLabel.innerText=currentMonth.toLocaleDateString("id-ID",{month:"long",year:"numeric"})
+  const y=currentMonth.getFullYear(),m=currentMonth.getMonth()
+  const start=(new Date(y,m,1).getDay()+6)%7
+  const days=new Date(y,m+1,0).getDate()
+  for(let i=0;i<start;i++) calendarGrid.innerHTML+="<div></div>"
+  for(let d=1;d<=days;d++){
+    const date=`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`
+    const events=[]
+    boardData.forEach(col=>col.cards.forEach(c=>c.date===date&&events.push(c.text)))
+    calendarGrid.innerHTML+=`
+    <div class="glass p-2 rounded-xl min-h-[90px]">
+      <div class="font-semibold">${d}</div>
+      ${events.map(e=>`<div class="event bg-black/10">${e}</div>`).join("")}
+    </div>`
+  }
+}
+function changeMonth(v){currentMonth.setMonth(currentMonth.getMonth()+v);renderCalendar()}
+
+/* GOOGLE SHEET */
+const SHEET_API="https://script.google.com/macros/s/AKfycbwoQSX_yqDM3WRkg8TJzRFRSq1QTFWTTVvysiqlYj0vOvtev_CipGVnOMAxv45EYemj1w/exec"
+async function loadFromSheet(){
+  try{
+    const res=await fetch(SHEET_API)
+    const result=await res.json()
+    const rows=Array.isArray(result)?result.slice(1):result.data.slice(1)
+    boardData=[{title:"To Do",cards:[]},{title:"In Progress",cards:[]},{title:"Done",cards:[]}]
+    rows.forEach(r=>{
+      const col=boardData.find(c=>c.title===r[1])
+      if(col) col.cards.push({text:r[2],date:r[3]||today})
+    })
+    renderBoard()
+  }catch(e){console.error(e)}
+}
+
+/* RESET */
+function resetAll(){if(confirm("Hapus semua data?")){localStorage.clear();location.reload()}}
+
+/* INIT */
+renderBoard()
+loadFromSheet()
+</script>
+
+</body>
+</html>
